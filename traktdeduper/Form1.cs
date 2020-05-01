@@ -1,15 +1,15 @@
-﻿using System;
-using System.Windows.Forms;
-using System.Net.Http;
+﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace traktdeduper
 {
     public partial class Form1 : Form
     {
-        Uri baseAddress = new Uri("https://api.trakt.tv/");
+        private Uri baseAddress = new Uri("https://api.trakt.tv/");
 
         public Form1()
         {
@@ -19,17 +19,19 @@ namespace traktdeduper
         private async void MenuItem_reAuth_Click(object sender, EventArgs e)
         {
             var httpClient = new HttpClient { BaseAddress = baseAddress };
-            var content = new StringContent("{  \"client_id\": \""+ Properties.Settings.Default.clientID+ "\"}", System.Text.Encoding.Default, "application/json");
+            var content = new StringContent("{  \"client_id\": \"" + Properties.Settings.Default.clientID + "\"}", System.Text.Encoding.Default, "application/json");
             var response = await httpClient.PostAsync("oauth/device/code", content);
 
             if (!response.IsSuccessStatusCode)
-                MessageBox.Show("Failed to get authorization code "+response.StatusCode.ToString());
+            {
+                MessageBox.Show("Failed to get authorization code " + response.StatusCode.ToString());
+            }
 
             JObject responseObject = JObject.Parse(await response.Content.ReadAsStringAsync());
             if (!string.IsNullOrEmpty(responseObject.SelectToken("user_code").ToString()))
             {
                 Console.WriteLine("Successfully received user code: " + responseObject.SelectToken("user_code").ToString());
-                MessageBox.Show(string.Format("Please enter code\r\n\r\n{0}\r\n\r\nat\r\n{1}\r\nbefore clicking \"OK\"", responseObject.SelectToken("user_code").ToString(), responseObject.SelectToken("verification_url").ToString()),"Reauthorization",MessageBoxButtons.OK,MessageBoxIcon.Exclamation);
+                MessageBox.Show(string.Format("Please enter code\r\n\r\n{0}\r\n\r\nat\r\n{1}\r\nbefore clicking \"OK\"", responseObject.SelectToken("user_code").ToString(), responseObject.SelectToken("verification_url").ToString()), "Reauthorization", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
             }
             PollAccessToken(responseObject.SelectToken("device_code").ToString(), Properties.Settings.Default.clientID, Properties.Settings.Default.clientSecret, int.Parse(responseObject.SelectToken("interval").ToString()), int.Parse(responseObject.SelectToken("expires_in").ToString()));
         }
@@ -38,11 +40,13 @@ namespace traktdeduper
         {
             var httpClient = new HttpClient { BaseAddress = baseAddress };
 
-            var content = new StringContent("{  \"refresh_token\": \"" +Properties.Settings.Default.refreshToken+"\",  \"client_id\": \""+Properties.Settings.Default.clientID+"\",  \"client_secret\": \""+Properties.Settings.Default.clientSecret+"\",  \"redirect_uri\": \"urn:ietf:wg:oauth:2.0:oob\",  \"grant_type\": \"refresh_token\"}", System.Text.Encoding.Default, "application/json");
+            var content = new StringContent("{  \"refresh_token\": \"" + Properties.Settings.Default.refreshToken + "\",  \"client_id\": \"" + Properties.Settings.Default.clientID + "\",  \"client_secret\": \"" + Properties.Settings.Default.clientSecret + "\",  \"redirect_uri\": \"urn:ietf:wg:oauth:2.0:oob\",  \"grant_type\": \"refresh_token\"}", System.Text.Encoding.Default, "application/json");
             var response = await httpClient.PostAsync("oauth/token", content);
             var test = Properties.Settings.Default.refreshToken;
             if (!response.IsSuccessStatusCode)
+            {
                 return;
+            }
 
             JObject responseObject = JObject.Parse(await response.Content.ReadAsStringAsync());
             Properties.Settings.Default.AccessExpiration = DateTime.Now.AddMonths(3);
@@ -57,7 +61,7 @@ namespace traktdeduper
 
             toolStripStatusLabel2.Text = "Attempting Reauth";
 
-            while (waited< Expiration)
+            while (waited < Expiration)
             {
                 var content = new StringContent("{  \"code\": \"" + deviceCode + "\",  \"client_id\": \"" + clientID + "\",  \"client_secret\": \"" + clientSecret + "\"}", System.Text.Encoding.Default, "application/json");
                 var response = await httpClient.PostAsync("oauth/device/token", content);
@@ -104,8 +108,8 @@ namespace traktdeduper
                         }
                     case 429: //Slow Down - your app is polling too quickly
                         {
-                            System.Threading.Thread.Sleep(2*Interval * 1000); //convert to ms and sleep for a interval
-                            waited += (Interval*2);
+                            System.Threading.Thread.Sleep(2 * Interval * 1000); //convert to ms and sleep for a interval
+                            waited += (Interval * 2);
                             continue;
                         }
                     default:
@@ -126,7 +130,7 @@ namespace traktdeduper
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("trakt-api-version", "2");
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("trakt-api-key", Properties.Settings.Default.clientID);
 
-            var response = await httpClient.GetAsync("users/" + Username + "/history/" + listBox1.SelectedItem.ToString() + "/?page="+page+"&limit="+limit);
+            var response = await httpClient.GetAsync("users/" + Username + "/history/" + listBox1.SelectedItem.ToString() + "/?page=" + page + "&limit=" + limit);
             string responseData = await response.Content.ReadAsStringAsync();
             toolStripStatusLabel2.Text = "History retrieval successful";
             return JArray.Parse(responseData.ToString());
@@ -145,28 +149,39 @@ namespace traktdeduper
             {
                 string tokenPath = "";
                 if (item.SelectToken("type").ToString() == "movie")
+                {
                     tokenPath = "movie.ids.slug";
+                }
                 else if (item.SelectToken("type").ToString() == "episode")
+                {
                     tokenPath = "episode.ids.trakt";
-
+                }
 
                 if (!HistoryDict.ContainsKey(item.SelectToken(tokenPath).ToString())) //if itemname not already in dictionary
+                {
                     HistoryDict.Add(item.SelectToken(tokenPath).ToString(), new JArray(item)); //Add new dictionary item of <title, Jarray(watched object)>
+                }
                 else //if itemname already in dictionary
                 {
                     foreach (JToken value in HistoryDict[item.SelectToken(tokenPath).ToString()]) //for each item in the historydict at location [title]
                     {
                         var valuetimestamp = DateTime.Parse(value.SelectToken("watched_at").ToString(), System.Globalization.CultureInfo.InvariantCulture);
                         var itemTimestamp = DateTime.Parse(item.SelectToken("watched_at").ToString(), System.Globalization.CultureInfo.InvariantCulture);
-                        if ( Math.Abs(value: (itemTimestamp - valuetimestamp).Days) < 2)  
+                        if (Math.Abs(value: (itemTimestamp - valuetimestamp).Days) < 2)
                         {
                             //If watched more than once in the last 2 days, add to idstoremove list to remove the watch in a later function
                             idsToRemove.Add(item.SelectToken("id").ToString());
 
                             if (listBox1.SelectedItem.ToString() == "movies")
+                            {
                                 richTextBox1.AppendText("\r\nhttps://trakt.tv/movies/" + item.SelectToken("movie.ids.slug").ToString());
+                            }
+
                             if (listBox1.SelectedItem.ToString() == "episodes")
+                            {
                                 richTextBox1.AppendText("\r\n" + item.SelectToken("show.ids.slug").ToString() + " - " + item.SelectToken("episode.title").ToString());
+                            }
+
                             break; //If one match found, no need to compare against all items in the historydict
                         }
                     }
@@ -179,7 +194,7 @@ namespace traktdeduper
         private async Task RemoveFromHistory(List<String> idsToRemove)
         {
             var httpClient = new HttpClient { BaseAddress = baseAddress };
-            httpClient.DefaultRequestHeaders.TryAddWithoutValidation("authorization", "Bearer "+ Properties.Settings.Default.AccessToken);
+            httpClient.DefaultRequestHeaders.TryAddWithoutValidation("authorization", "Bearer " + Properties.Settings.Default.AccessToken);
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("trakt-api-version", "2");
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("trakt-api-key", Properties.Settings.Default.clientID);
 
@@ -198,15 +213,19 @@ namespace traktdeduper
         private async void Button_traktDedupe_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(Properties.Settings.Default.AccessToken)) //If access token missing, request one
-                 MenuItem_reAuth_Click(sender, e);
+            {
+                MenuItem_reAuth_Click(sender, e);
+            }
             else if (Properties.Settings.Default.AccessExpiration < DateTime.Now) // if access token expired, request a new one
+            {
                 await RefreshAccessToken();
+            }
 
             toolStripStatusLabel2.Text = "Getting history for " + Properties.Settings.Default.username;
             var WatchedHistory = await GetHistory(Properties.Settings.Default.username);
 
             toolStripStatusLabel2.Text = "Finding Dupes";
-            List <String> WatchesToRemove = FindDupes(WatchedHistory);
+            List<String> WatchesToRemove = FindDupes(WatchedHistory);
 
             if (WatchesToRemove.Count >= 1)
             {
@@ -214,7 +233,9 @@ namespace traktdeduper
                 await RemoveFromHistory(WatchesToRemove);
             }
             else
+            {
                 toolStripStatusLabel2.Text = "No Dupes Found";
+            }
         }
 
         private void MenuItem_Settings_Click(object sender, EventArgs e)
@@ -229,7 +250,9 @@ namespace traktdeduper
             if (string.IsNullOrWhiteSpace(Properties.Settings.Default.username)
                 || string.IsNullOrWhiteSpace(Properties.Settings.Default.clientID)
                 || string.IsNullOrWhiteSpace(Properties.Settings.Default.clientSecret))
-                MenuItem_Settings_Click(sender,e);
+            {
+                MenuItem_Settings_Click(sender, e);
+            }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -248,5 +271,3 @@ namespace traktdeduper
         }
     }
 }
-
-//test
