@@ -119,7 +119,7 @@
   </resheader>
   <data name="richTextBox1.Text" xml:space="preserve">
     <value>You can obtain a Client ID and Client Secret from
-https://trakt.tv/ap
+https://trakt.tv/oauth/applications
 
 Create a new application
 Give it a name like "Trakt Deduper"
